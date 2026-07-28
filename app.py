@@ -3,10 +3,11 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import os
 from theme import zaladuj_styl
 
 # --- KONFIGURACJA STRONY ---
-st.set_page_config(page_title="Manufaktura ERP", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Manufaktura ERP", layout="wide", initial_sidebar_state="collapsed")
 
 # --- ZAŁADOWANIE WIZUALIZACJI ---
 zaladuj_styl()
@@ -23,18 +24,25 @@ def init_connection():
 
 client = init_connection()
 
-# --- MENU BOCZNE ---
-st.sidebar.title("🪓 Manufaktura Kiełbas")
-st.sidebar.markdown("---")
-wybrany_modul = st.sidebar.radio(
-    "Panel Sterowania",
-    ["📦 Magazyn (Stany)", "📖 Przepisy (Karty)", "🏭 Produkcja", "💰 Finanse i Koszty"]
-)
+# --- LOGO NA GÓRZE (Wyśrodkowane) ---
+col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
+with col_logo2:
+    if os.path.exists("kiel1.png"):
+        st.image("kiel1.png", use_column_width=True)
+
+# --- MENU GŁÓWNE (ZAKŁADKI) ---
+# Zamiast paska bocznego, tworzymy responsywne zakładki u góry
+tab_magazyn, tab_przepisy, tab_produkcja, tab_finanse = st.tabs([
+    "📦 Magazyn (Stany)", 
+    "📖 Przepisy (Karty)", 
+    "🏭 Produkcja", 
+    "💰 Finanse i Koszty"
+])
 
 # ==========================================
 #          MODUŁ 1: MAGAZYN
 # ==========================================
-if wybrany_modul == "📦 Magazyn (Stany)":
+with tab_magazyn:
     st.title("📦 Magazyn Surowców")
     try:
         sheet_magazyn = client.open_by_key(ID_ARKUSZA).worksheet("Magazyn")
@@ -55,7 +63,7 @@ if wybrany_modul == "📦 Magazyn (Stany)":
 # ==========================================
 #          MODUŁ 2: PRZEPISY
 # ==========================================
-elif wybrany_modul == "📖 Przepisy (Karty)":
+with tab_przepisy:
     st.title("📖 Karty Technologiczne")
     try:
         sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
@@ -73,7 +81,7 @@ elif wybrany_modul == "📖 Przepisy (Karty)":
             }
         )
         
-        if st.button("💾 Zapisz receptury", type="primary"):
+        if st.button("💾 Zapisz receptury", type="primary", key="btn_przepisy"):
             with st.spinner("Zapisywanie receptur..."):
                 sheet_przepisy.clear()
                 sheet_przepisy.update("A1", [zmieniony_przepis.columns.values.tolist()] + zmieniony_przepis.values.tolist())
@@ -84,7 +92,7 @@ elif wybrany_modul == "📖 Przepisy (Karty)":
 # ==========================================
 #          MODUŁ 3: PRODUKCJA
 # ==========================================
-elif wybrany_modul == "🏭 Produkcja":
+with tab_produkcja:
     st.title("🏭 Dziennik Produkcyjny")
     try:
         sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
@@ -124,7 +132,7 @@ elif wybrany_modul == "🏭 Produkcja":
                     df_przyp['Potrzebna_Ilosc'] = df_przyp['Potrzebna_Ilosc'].round(1).astype(str) + " g"
                     st.dataframe(df_przyp[['Skladnik', 'Potrzebna_Ilosc']], use_container_width=True, hide_index=True)
             
-            if st.button("🚀 Rozpocznij i zapisz partię", type="primary"):
+            if st.button("🚀 Rozpocznij i zapisz partię", type="primary", key="btn_produkcja"):
                 sheet_produkcja.append_row([nr_partii, dzisiaj.strftime('%Y-%m-%d'), wybrana_kielbasa, waga_miesa, sprzet, "W toku"])
                 st.success(f"Partia {nr_partii} zapisana!")
     except Exception as e:
@@ -133,7 +141,7 @@ elif wybrany_modul == "🏭 Produkcja":
 # ==========================================
 #          MODUŁ 4: FINANSE
 # ==========================================
-elif wybrany_modul == "💰 Finanse i Koszty":
+with tab_finanse:
     st.title("💰 Rozliczenie Partii (Food Cost)")
     st.markdown("Wybierz partię z Dziennika Produkcyjnego, aby wyliczyć jej opłacalność po obróbce termicznej.")
     
@@ -197,7 +205,7 @@ elif wybrany_modul == "💰 Finanse i Koszty":
             st.dataframe(pd.DataFrame(szczegoly_kosztow), use_container_width=True, hide_index=True)
             
             if calkowity_koszt_partii == 0:
-                st.error("⚠️ Błąd krytyczny: Żaden ze składników przepisu nie został znaleziony w Magazynie. Sprawdź, czy nazwy (np. 'Łopatka wieprzowa') są identyczne w obu zakładkach.")
+                st.error("⚠️ Błąd krytyczny: Żaden ze składników przepisu nie został znaleziony w Magazynie.")
             else:
                 st.markdown("---")
                 st.markdown("### ⚖️ Rozliczenie po obróbce i sprzedaż")
@@ -221,7 +229,7 @@ elif wybrany_modul == "💰 Finanse i Koszty":
                 m3.metric("Całkowity zysk z partii", f"{zysk_netto:.2f} zł")
                 m4.metric("Marża brutto", f"{marza_procent:.1f} %")
                 
-                if st.button("💾 Zapisz rozliczenie do raportów", type="primary"):
+                if st.button("💾 Zapisz rozliczenie do raportów", type="primary", key="btn_finanse"):
                     sheet_finanse.append_row([
                         wybrana_partia, nazwa_kielbasy, round(calkowity_koszt_partii, 2), 
                         round(waga_surowego_miesa, 2), round(waga_gotowa, 2), 
