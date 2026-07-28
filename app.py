@@ -31,7 +31,6 @@ with col_logo2:
         st.image("kiel1.png", use_column_width=True)
 
 # --- MENU GŁÓWNE (ZAKŁADKI) ---
-# Zamiast paska bocznego, tworzymy responsywne zakładki u góry
 tab_magazyn, tab_przepisy, tab_produkcja, tab_finanse = st.tabs([
     "📦 Magazyn (Stany)", 
     "📖 Przepisy (Karty)", 
@@ -103,6 +102,8 @@ with tab_produkcja:
             st.warning("Brak przepisów w bazie.")
         else:
             unikalne_kielbasy = df_przepisy['Nazwa_Kielbasy'].unique().tolist()
+            
+            st.markdown("### ⚙️ Parametry Partii")
             col1, col2 = st.columns(2)
             with col1:
                 wybrana_kielbasa = st.selectbox("Wybierz produkt:", unikalne_kielbasy)
@@ -116,22 +117,37 @@ with tab_produkcja:
             przepis_filtr['Procent_Wagi_Miesa'] = przepis_filtr['Procent_Wagi_Miesa'].astype(str).str.replace(',', '.').astype(float)
             
             st.markdown("---")
+            
+            # Zamiana tabel na interaktywne listy z Checkboxami
             col_mieso, col_przyprawy = st.columns(2)
+            
             with col_mieso:
-                st.markdown("### 🥩 Wymagane klasy mięsa")
+                st.markdown("### 🥩 Wsad Mięsny")
                 df_mieso = przepis_filtr[przepis_filtr['Kategoria'] == 'Mięso'].copy()
                 if not df_mieso.empty:
-                    df_mieso['Potrzebna_Ilosc'] = (waga_miesa * (df_mieso['Procent_Wagi_Miesa'] / 100))
-                    df_mieso['Potrzebna_Ilosc'] = df_mieso['Potrzebna_Ilosc'].round(2).astype(str) + " kg"
-                    st.dataframe(df_mieso[['Skladnik', 'Potrzebna_Ilosc']], use_container_width=True, hide_index=True)
+                    df_mieso['Potrzebna_Ilosc'] = (waga_miesa * (df_mieso['Procent_Wagi_Miesa'] / 100)).round(2)
+                    
+                    for index, row in df_mieso.iterrows():
+                        skladnik = row['Skladnik']
+                        ilosc = row['Potrzebna_Ilosc']
+                        st.checkbox(f"**{skladnik}** — {ilosc} kg", key=f"mieso_{index}")
+                else:
+                    st.info("Brak zdefiniowanego mięsa.")
+                    
             with col_przyprawy:
-                st.markdown("### 🧪 Wymagane przyprawy")
+                st.markdown("### 🧪 Przyprawy i Dodatki")
                 df_przyp = przepis_filtr[przepis_filtr['Kategoria'] != 'Mięso'].copy()
                 if not df_przyp.empty:
-                    df_przyp['Potrzebna_Ilosc'] = (waga_miesa * 1000) * (df_przyp['Procent_Wagi_Miesa'] / 100)
-                    df_przyp['Potrzebna_Ilosc'] = df_przyp['Potrzebna_Ilosc'].round(1).astype(str) + " g"
-                    st.dataframe(df_przyp[['Skladnik', 'Potrzebna_Ilosc']], use_container_width=True, hide_index=True)
+                    df_przyp['Potrzebna_Ilosc'] = ((waga_miesa * 1000) * (df_przyp['Procent_Wagi_Miesa'] / 100)).round(1)
+                    
+                    for index, row in df_przyp.iterrows():
+                        skladnik = row['Skladnik']
+                        ilosc = row['Potrzebna_Ilosc']
+                        st.checkbox(f"**{skladnik}** — {ilosc} g", key=f"przyp_{index}")
+                else:
+                    st.info("Brak zdefiniowanych przypraw.")
             
+            st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🚀 Rozpocznij i zapisz partię", type="primary", key="btn_produkcja"):
                 sheet_produkcja.append_row([nr_partii, dzisiaj.strftime('%Y-%m-%d'), wybrana_kielbasa, waga_miesa, sprzet, "W toku"])
                 st.success(f"Partia {nr_partii} zapisana!")
