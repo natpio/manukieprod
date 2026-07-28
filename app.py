@@ -30,6 +30,10 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
     .stDataFrame { background-color: #1e1e1e !important; }
+    
+    /* Stylowanie wskaźników metryk finansowych */
+    [data-testid="stMetricValue"] { color: #ffffff !important; }
+    [data-testid="stMetricLabel"] { color: #aaaaaa !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -79,8 +83,6 @@ if wybrany_modul == "📦 Magazyn (Stany)":
 # ==========================================
 elif wybrany_modul == "📖 Przepisy (Karty)":
     st.title("📖 Karty Technologiczne")
-    st.markdown("Określ procentowy udział. Dla mięs suma powinna wynosić 100%. Przyprawy liczone są jako naddatek do wagi mięsa.")
-    
     try:
         sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
         df_przepisy = pd.DataFrame(sheet_przepisy.get_all_records())
@@ -93,12 +95,7 @@ elif wybrany_modul == "📖 Przepisy (Karty)":
             use_container_width=True, 
             hide_index=True,
             column_config={
-                "Kategoria": st.column_config.SelectboxColumn(
-                    "Kategoria",
-                    help="Wybierz czy to mięso, czy przyprawa",
-                    options=["Mięso", "Przyprawa", "Dodatek (Woda/Jelita)"],
-                    required=True,
-                )
+                "Kategoria": st.column_config.SelectboxColumn("Kategoria", options=["Mięso", "Przyprawa", "Dodatek (Woda/Jelita)"], required=True)
             }
         )
         
@@ -115,40 +112,29 @@ elif wybrany_modul == "📖 Przepisy (Karty)":
 # ==========================================
 elif wybrany_modul == "🏭 Produkcja":
     st.title("🏭 Dziennik Produkcyjny")
-    
     try:
         sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
         df_przepisy = pd.DataFrame(sheet_przepisy.get_all_records())
         sheet_produkcja = client.open_by_key(ID_ARKUSZA).worksheet("Produkcja")
         
         if df_przepisy.empty:
-            st.warning("Brak przepisów w bazie. Dodaj recepturę w zakładce Przepisy.")
+            st.warning("Brak przepisów w bazie.")
         else:
             unikalne_kielbasy = df_przepisy['Nazwa_Kielbasy'].unique().tolist()
-            
             col1, col2 = st.columns(2)
             with col1:
                 wybrana_kielbasa = st.selectbox("Wybierz produkt:", unikalne_kielbasy)
                 waga_miesa = st.number_input("Całkowita waga docelowego wsadu mięsnego (kg):", min_value=0.0, step=0.5, value=10.0)
-            
             with col2:
                 dzisiaj = datetime.now()
                 nr_partii = st.text_input("Numer Partii:", value=f"MK-{dzisiaj.strftime('%y%m%d')}-01")
-                sprzet = st.selectbox("Użyty sprzęt i konfiguracja:", [
-                    "Maszynka: Serie 6 (2100W) - Sitko 8mm",
-                    "Maszynka: Serie 6 (2100W) - Sitko 4mm",
-                    "Maszynka: Serie 6 (2100W) - Szarpak",
-                    "Mieszarka ręczna",
-                    "Nadziewarka pionowa"
-                ])
+                sprzet = st.selectbox("Użyty sprzęt i konfiguracja:", ["Maszynka: Serie 6 (2100W) - Sitko 8mm", "Maszynka: Serie 6 (2100W) - Sitko 4mm", "Maszynka: Serie 6 (2100W) - Szarpak", "Mieszarka ręczna", "Nadziewarka pionowa"])
                 
-            # Przygotowanie danych do obliczeń
             przepis_filtr = df_przepisy[df_przepisy['Nazwa_Kielbasy'] == wybrana_kielbasa].copy()
             przepis_filtr['Procent_Wagi_Miesa'] = przepis_filtr['Procent_Wagi_Miesa'].astype(str).str.replace(',', '.').astype(float)
             
             st.markdown("---")
             col_mieso, col_przyprawy = st.columns(2)
-            
             with col_mieso:
                 st.markdown("### 🥩 Wymagane klasy mięsa")
                 df_mieso = przepis_filtr[przepis_filtr['Kategoria'] == 'Mięso'].copy()
@@ -156,30 +142,129 @@ elif wybrany_modul == "🏭 Produkcja":
                     df_mieso['Potrzebna_Ilosc'] = (waga_miesa * (df_mieso['Procent_Wagi_Miesa'] / 100))
                     df_mieso['Potrzebna_Ilosc'] = df_mieso['Potrzebna_Ilosc'].round(2).astype(str) + " kg"
                     st.dataframe(df_mieso[['Skladnik', 'Potrzebna_Ilosc']], use_container_width=True, hide_index=True)
-                else:
-                    st.info("Brak zdefiniowanego mięsa w recepturze.")
-                    
             with col_przyprawy:
-                st.markdown("### 🧪 Wymagane przyprawy i dodatki")
+                st.markdown("### 🧪 Wymagane przyprawy")
                 df_przyp = przepis_filtr[przepis_filtr['Kategoria'] != 'Mięso'].copy()
                 if not df_przyp.empty:
                     df_przyp['Potrzebna_Ilosc'] = (waga_miesa * 1000) * (df_przyp['Procent_Wagi_Miesa'] / 100)
                     df_przyp['Potrzebna_Ilosc'] = df_przyp['Potrzebna_Ilosc'].round(1).astype(str) + " g"
                     st.dataframe(df_przyp[['Skladnik', 'Potrzebna_Ilosc']], use_container_width=True, hide_index=True)
-                else:
-                    st.info("Brak zdefiniowanych przypraw.")
             
             if st.button("🚀 Rozpocznij i zapisz partię", type="primary"):
-                with st.spinner("Zapisywanie w Dzienniku Produkcyjnym..."):
-                    sheet_produkcja.append_row([nr_partii, dzisiaj.strftime('%Y-%m-%d'), wybrana_kielbasa, waga_miesa, sprzet, "W toku"])
-                st.success(f"Partia {nr_partii} została zapisana w systemie!")
-
+                sheet_produkcja.append_row([nr_partii, dzisiaj.strftime('%Y-%m-%d'), wybrana_kielbasa, waga_miesa, sprzet, "W toku"])
+                st.success(f"Partia {nr_partii} zapisana!")
     except Exception as e:
-        st.error(f"Błąd modułu produkcji: {e}")
+        st.error(f"Błąd: {e}")
 
 # ==========================================
 #          MODUŁ 4: FINANSE
 # ==========================================
 elif wybrany_modul == "💰 Finanse i Koszty":
-    st.title("💰 Rentowność i Koszty")
-    st.info("Ten moduł zaprogramujemy w kolejnym kroku, gdy zapiszesz już pierwsze partie testowe.")
+    st.title("💰 Rozliczenie Partii (Food Cost)")
+    st.markdown("Wybierz partię z Dziennika Produkcyjnego, aby wyliczyć jej opłacalność po obróbce termicznej.")
+    
+    try:
+        # Pobieranie danych z 3 zakładek
+        sheet_produkcja = client.open_by_key(ID_ARKUSZA).worksheet("Produkcja")
+        sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
+        sheet_magazyn = client.open_by_key(ID_ARKUSZA).worksheet("Magazyn")
+        sheet_finanse = client.open_by_key(ID_ARKUSZA).worksheet("Finanse")
+        
+        df_produkcja = pd.DataFrame(sheet_produkcja.get_all_records())
+        df_przepisy = pd.DataFrame(sheet_przepisy.get_all_records())
+        df_magazyn = pd.DataFrame(sheet_magazyn.get_all_records())
+        
+        if df_produkcja.empty or df_przepisy.empty or df_magazyn.empty:
+            st.warning("Brakuje danych w Magazynie, Przepisach lub Produkcji do przeprowadzenia kalkulacji.")
+        else:
+            # Wybór partii do analizy
+            lista_partii = df_produkcja['Nr_Partii'].unique().tolist()
+            lista_partii.reverse() # Najnowsze na górze
+            wybrana_partia = st.selectbox("Wybierz numer partii do rozliczenia:", lista_partii)
+            
+            # Pobieranie informacji o wybranej partii
+            dane_partii = df_produkcja[df_produkcja['Nr_Partii'] == wybrana_partia].iloc[0]
+            nazwa_kielbasy = dane_partii['Rodzaj_Kielbasy']
+            waga_surowego_miesa = float(str(dane_partii['Waga_Miesa_kg']).replace(',', '.'))
+            
+            # Pobranie receptury
+            przepis = df_przepisy[df_przepisy['Nazwa_Kielbasy'] == nazwa_kielbasy].copy()
+            przepis['Procent_Wagi_Miesa'] = przepis['Procent_Wagi_Miesa'].astype(str).str.replace(',', '.').astype(float)
+            
+            # Łączenie receptury z cenami z magazynu
+            # Tworzymy słownik cen z magazynu (uśredniamy cenę, jeśli surowiec wpisano kilka razy)
+            df_magazyn['Cena_za_kg'] = df_magazyn['Cena_za_kg'].astype(str).str.replace(',', '.').astype(float)
+            ceny_surowcow = df_magazyn.groupby('Surowiec')['Cena_za_kg'].mean().to_dict()
+            
+            calkowity_koszt_partii = 0.0
+            
+            # Obliczanie wagi i kosztu dla każdego składnika
+            szczegoly_kosztow = []
+            for index, row in przepis.iterrows():
+                skladnik = row['Skladnik']
+                kategoria = row['Kategoria']
+                procent = row['Procent_Wagi_Miesa']
+                
+                # Obliczamy wagę składnika w KG
+                if kategoria == 'Mięso':
+                    waga_skladnika_kg = waga_surowego_miesa * (procent / 100)
+                else:
+                    # Przyprawy - liczone jako naddatek do 100% mięsa, zamieniamy gramy na kg
+                    waga_skladnika_kg = (waga_surowego_miesa * (procent / 100))
+                
+                # Szukamy ceny w magazynie (niewrażliwe na wielkość liter)
+                cena_za_kg = 0.0
+                for klucz_magazyn, cena in ceny_surowcow.items():
+                    if klucz_magazyn.strip().lower() == skladnik.strip().lower():
+                        cena_za_kg = cena
+                        break
+                        
+                koszt_skladnika = waga_skladnika_kg * cena_za_kg
+                calkowity_koszt_partii += koszt_skladnika
+                
+                szczegoly_kosztow.append({
+                    "Składnik": skladnik,
+                    "Zużycie (kg)": round(waga_skladnika_kg, 3),
+                    "Cena z Magazynu (zł/kg)": round(cena_za_kg, 2),
+                    "Koszt (zł)": round(koszt_skladnika, 2)
+                })
+            
+            st.markdown("### 📊 Kalkulacja Kosztów Produkcji")
+            st.dataframe(pd.DataFrame(szczegoly_kosztow), use_container_width=True, hide_index=True)
+            
+            if calkowity_koszt_partii == 0:
+                st.error("⚠️ Błąd krytyczny: Żaden ze składników przepisu nie został znaleziony w Magazynie. Sprawdź, czy nazwy (np. 'Łopatka wieprzowa') są identyczne w obu zakładkach.")
+            else:
+                st.markdown("---")
+                st.markdown("### ⚖️ Rozliczenie po obróbce i sprzedaż")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    waga_gotowa = st.number_input("Waga gotowego wyrobu (po pieczeniu/parzeniu w kg):", min_value=0.1, value=waga_surowego_miesa * 0.85, step=0.1)
+                with col2:
+                    cena_sprzedazy = st.number_input("Planowana cena sprzedaży (zł / kg):", min_value=1.0, value=55.0, step=1.0)
+                
+                # Obliczenia finansowe
+                koszt_1kg_gotowego = calkowity_koszt_partii / waga_gotowa
+                przychody_calkowite = waga_gotowa * cena_sprzedazy
+                zysk_netto = przychody_calkowite - calkowity_koszt_partii
+                marza_procent = (zysk_netto / przychody_calkowite) * 100 if przychody_calkowite > 0 else 0
+                ubytek_procent = ((waga_surowego_miesa - waga_gotowa) / waga_surowego_miesa) * 100
+                
+                st.markdown("### 📈 Podsumowanie Finansowe")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Koszt całkowity surowców", f"{calkowity_koszt_partii:.2f} zł")
+                m2.metric("Rzeczywisty koszt wytworzenia 1 kg", f"{koszt_1kg_gotowego:.2f} zł/kg", delta=f"Ubytek wagi: {ubytek_procent:.1f}%", delta_color="inverse")
+                m3.metric("Całkowity zysk z partii", f"{zysk_netto:.2f} zł")
+                m4.metric("Marża brutto", f"{marza_procent:.1f} %")
+                
+                if st.button("💾 Zapisz rozliczenie do raportów", type="primary"):
+                    sheet_finanse.append_row([
+                        wybrana_partia, nazwa_kielbasy, round(calkowity_koszt_partii, 2), 
+                        round(waga_surowego_miesa, 2), round(waga_gotowa, 2), 
+                        round(koszt_1kg_gotowego, 2), round(cena_sprzedazy, 2), round(zysk_netto, 2)
+                    ])
+                    st.success(f"Rozliczenie partii {wybrana_partia} zostało zapisane!")
+                    
+    except Exception as e:
+        st.error(f"Błąd modułu finansowego: {e}")
