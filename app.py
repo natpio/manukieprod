@@ -50,7 +50,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- POŁĄCZENIE Z BAZĄ DANYCH (Google Sheets) ---
-ID_ARKUSZA = "TWÓJ_NOWY_ID_ARKUSZA" # <-- TUTAJ WKLEJ ID NOWEGO ARKUSZA
+ID_ARKUSZA = "1zr3fL2b6-KwDXoGC5EDfYpf0b1pgh6_-126TrSm4wZo" # <-- TUTAJ WKLEJ ID NOWEGO ARKUSZA
 
 @st.cache_resource
 def init_connection():
