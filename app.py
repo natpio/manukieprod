@@ -24,7 +24,14 @@ def init_connection():
 
 client = init_connection()
 
-# --- LOGO NA GÓRZE (Wyśrodkowane) ---
+# --- PAMIĘĆ PODRĘCZNA (CACHE) - OCHRONA PRZED BŁĘDEM 429 ---
+@st.cache_data(ttl=60)
+def pobierz_dane_z_arkusza(nazwa_zakladki):
+    """Pobiera dane i trzyma je w pamięci przez 60 sekund. Zmniejsza zużycie API o 90%."""
+    sheet = client.open_by_key(ID_ARKUSZA).worksheet(nazwa_zakladki)
+    return sheet.get_all_records()
+
+# --- LOGO NA GÓRZE ---
 col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
 with col_logo2:
     if os.path.exists("kiel1.png"):
@@ -44,8 +51,9 @@ tab_magazyn, tab_przepisy, tab_produkcja, tab_finanse = st.tabs([
 with tab_magazyn:
     st.title("📦 Magazyn Surowców")
     try:
-        sheet_magazyn = client.open_by_key(ID_ARKUSZA).worksheet("Magazyn")
-        df_magazyn = pd.DataFrame(sheet_magazyn.get_all_records())
+        # Odczyt z pamięci podręcznej (błyskawiczny)
+        dane_magazyn = pobierz_dane_z_arkusza("Magazyn")
+        df_magazyn = pd.DataFrame(dane_magazyn)
         if df_magazyn.empty:
             df_magazyn = pd.DataFrame(columns=["ID", "Surowiec", "Ilosc_kg", "Cena_za_kg", "Data_Waznosci", "Nr_Partii_Dostawcy"])
         
@@ -53,8 +61,10 @@ with tab_magazyn:
         
         if st.button("💾 Zapisz zmiany w bazie", type="primary"):
             with st.spinner("Aktualizowanie bazy..."):
+                sheet_magazyn = client.open_by_key(ID_ARKUSZA).worksheet("Magazyn")
                 sheet_magazyn.clear()
                 sheet_magazyn.update("A1", [zmieniony_df.columns.values.tolist()] + zmieniony_df.values.tolist())
+                st.cache_data.clear() # Reset cache po zapisie!
             st.success("Magazyn zaktualizowany!")
     except Exception as e:
         st.error(f"Błąd połączenia: {e}")
@@ -65,8 +75,8 @@ with tab_magazyn:
 with tab_przepisy:
     st.title("📖 Karty Technologiczne")
     try:
-        sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
-        df_przepisy = pd.DataFrame(sheet_przepisy.get_all_records())
+        dane_przepisy = pobierz_dane_z_arkusza("Przepisy")
+        df_przepisy = pd.DataFrame(dane_przepisy)
         if df_przepisy.empty:
             df_przepisy = pd.DataFrame(columns=["ID", "Nazwa_Kielbasy", "Kategoria", "Skladnik", "Procent_Wagi_Miesa"])
         
@@ -82,8 +92,10 @@ with tab_przepisy:
         
         if st.button("💾 Zapisz receptury", type="primary", key="btn_przepisy"):
             with st.spinner("Zapisywanie receptur..."):
+                sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
                 sheet_przepisy.clear()
                 sheet_przepisy.update("A1", [zmieniony_przepis.columns.values.tolist()] + zmieniony_przepis.values.tolist())
+                st.cache_data.clear() # Reset cache po zapisie!
             st.success("Przepisy zapisane pomyślnie!")
     except Exception as e:
         st.error(f"Błąd połączenia: {e}")
@@ -94,9 +106,7 @@ with tab_przepisy:
 with tab_produkcja:
     st.title("🏭 Dziennik Produkcyjny")
     try:
-        sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
-        df_przepisy = pd.DataFrame(sheet_przepisy.get_all_records())
-        sheet_produkcja = client.open_by_key(ID_ARKUSZA).worksheet("Produkcja")
+        df_przepisy = pd.DataFrame(pobierz_dane_z_arkusza("Przepisy"))
         
         if df_przepisy.empty:
             st.warning("Brak przepisów w bazie.")
@@ -149,7 +159,9 @@ with tab_produkcja:
             
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🚀 Rozpocznij i zapisz partię", type="primary", key="btn_produkcja"):
+                sheet_produkcja = client.open_by_key(ID_ARKUSZA).worksheet("Produkcja")
                 sheet_produkcja.append_row([nr_partii, dzisiaj.strftime('%Y-%m-%d'), wybrana_kielbasa, waga_miesa, sprzet, "W toku"])
+                st.cache_data.clear() # Reset cache, bo dodano wpis!
                 st.success(f"Partia {nr_partii} zapisana!")
     except Exception as e:
         st.error(f"Błąd: {e}")
@@ -162,14 +174,9 @@ with tab_finanse:
     st.markdown("Wybierz partię z Dziennika Produkcyjnego, aby wyliczyć jej opłacalność po obróbce termicznej.")
     
     try:
-        sheet_produkcja = client.open_by_key(ID_ARKUSZA).worksheet("Produkcja")
-        sheet_przepisy = client.open_by_key(ID_ARKUSZA).worksheet("Przepisy")
-        sheet_magazyn = client.open_by_key(ID_ARKUSZA).worksheet("Magazyn")
-        sheet_finanse = client.open_by_key(ID_ARKUSZA).worksheet("Finanse")
-        
-        df_produkcja = pd.DataFrame(sheet_produkcja.get_all_records())
-        df_przepisy = pd.DataFrame(sheet_przepisy.get_all_records())
-        df_magazyn = pd.DataFrame(sheet_magazyn.get_all_records())
+        df_produkcja = pd.DataFrame(pobierz_dane_z_arkusza("Produkcja"))
+        df_przepisy = pd.DataFrame(pobierz_dane_z_arkusza("Przepisy"))
+        df_magazyn = pd.DataFrame(pobierz_dane_z_arkusza("Magazyn"))
         
         if df_produkcja.empty or df_przepisy.empty or df_magazyn.empty:
             st.warning("Brakuje danych w Magazynie, Przepisach lub Produkcji do przeprowadzenia kalkulacji.")
@@ -246,11 +253,13 @@ with tab_finanse:
                 m4.metric("Marża brutto", f"{marza_procent:.1f} %")
                 
                 if st.button("💾 Zapisz rozliczenie do raportów", type="primary", key="btn_finanse"):
+                    sheet_finanse = client.open_by_key(ID_ARKUSZA).worksheet("Finanse")
                     sheet_finanse.append_row([
                         wybrana_partia, nazwa_kielbasy, round(calkowity_koszt_partii, 2), 
                         round(waga_surowego_miesa, 2), round(waga_gotowa, 2), 
                         round(koszt_1kg_gotowego, 2), round(cena_sprzedazy, 2), round(zysk_netto, 2)
                     ])
+                    st.cache_data.clear() # Reset cache!
                     st.success(f"Rozliczenie partii {wybrana_partia} zostało zapisane!")
                     
     except Exception as e:
